@@ -540,6 +540,7 @@ namespace Breeze.ContextProvider.NH
         static Dictionary<string, string> BreezeTypeMap = new Dictionary<string, string>() {
                     {"Byte[]", "Binary" },
                     {"BinaryBlob", "Binary" },
+                    {"DateTime2", "DateTime"},
                     {"Timestamp", "DateTime" },
                     {"TimeAsTimeSpan", "Time" }
                 };
