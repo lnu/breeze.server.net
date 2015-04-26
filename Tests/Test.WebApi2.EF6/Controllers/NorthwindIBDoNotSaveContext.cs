@@ -25,7 +25,7 @@ namespace Sample_WebApi2.Controllers
     /// Perform your custom save to wherever you store entity data.
     /// This implementation does nothing.
     /// </summary>
-    protected override void SaveChangesCore(SaveWorkState saveWorkState) {}
+    protected override void SaveChangesCore(SaveWorkState saveWorkState, TransactionType transactionType) {}
 
     /// <summary>
     /// Return the SaveMap that Breeze prepares

@@ -172,7 +172,7 @@ namespace Breeze.ContextProvider.EF6 {
       return keyValues;
     }
 
-    protected override void SaveChangesCore(SaveWorkState saveWorkState) {
+    protected override void SaveChangesCore(SaveWorkState saveWorkState, TransactionType transactionType) {
       var saveMap = saveWorkState.SaveMap;
       var deletedEntities = ProcessSaves(saveMap);
 

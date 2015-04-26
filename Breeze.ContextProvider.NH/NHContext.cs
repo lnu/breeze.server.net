@@ -207,11 +207,11 @@ namespace Breeze.ContextProvider.NH {
     /// Note that this method sets session.FlushMode = FlushMode.Never, so manual flushes are required.
     /// </summary>
     /// <param name="saveMap">Map of Type -> List of entities of that type</param>
-    protected override void SaveChangesCore(SaveWorkState saveWorkState) {
+    protected override void SaveChangesCore(SaveWorkState saveWorkState, TransactionType transactionType) {
       var saveMap = saveWorkState.SaveMap;
       session.FlushMode = FlushMode.Never;
       var tx = session.Transaction;
-      var hasExistingTransaction = tx.IsActive;
+      var hasExistingTransaction = transactionType!=TransactionType.None || tx.IsActive;
       if (!hasExistingTransaction) tx.Begin(BreezeConfig.Instance.GetTransactionSettings().IsolationLevelAs);
       try {
         // Relate entities in the saveMap to other NH entities, so NH can save the FK values.
