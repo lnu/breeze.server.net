@@ -75,14 +75,14 @@ namespace Breeze.ContextProvider {
         if (transactionSettings.TransactionType == TransactionType.TransactionScope) {
           var txOptions = transactionSettings.ToTransactionOptions();
           using (var txScope = new TransactionScope(TransactionScopeOption.Required, txOptions)) {           
-            OpenAndSave(SaveWorkState);           
+            OpenAndSave(SaveWorkState, transactionSettings.TransactionType);           
             txScope.Complete();
           }
         } else if (transactionSettings.TransactionType == TransactionType.DbTransaction) {
           this.OpenDbConnection();
           using (IDbTransaction tran = BeginTransaction(transactionSettings.IsolationLevelAs)) {
             try {
-              OpenAndSave(SaveWorkState);
+              OpenAndSave(SaveWorkState, transactionSettings.TransactionType);
               tran.Commit();
             } catch {
               tran.Rollback();
@@ -112,11 +112,11 @@ namespace Breeze.ContextProvider {
       return false;
     }
 
-    private void OpenAndSave(SaveWorkState saveWorkState) {
+    private void OpenAndSave(SaveWorkState saveWorkState, TransactionType transactionType=TransactionType.None) {
       
       OpenDbConnection();    // ensure connection is available for BeforeSaveEntities
       saveWorkState.BeforeSave();
-      SaveChangesCore(saveWorkState);
+      SaveChangesCore(saveWorkState, transactionType);
       saveWorkState.AfterSave();
     }
 
@@ -157,7 +157,7 @@ namespace Breeze.ContextProvider {
 
     protected abstract String BuildJsonMetadata();
 
-    protected abstract void SaveChangesCore(SaveWorkState saveWorkState);
+    protected abstract void SaveChangesCore(SaveWorkState saveWorkState, TransactionType transactionType);
 
     public virtual object[] GetKeyValues(EntityInfo entityInfo) {
       throw new NotImplementedException();

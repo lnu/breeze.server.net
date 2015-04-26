@@ -59,7 +59,7 @@ namespace Sample_WebApi2.Controllers {
       //return json;
     }
 
-    protected override void SaveChangesCore(SaveWorkState saveWorkState) {
+    protected override void SaveChangesCore(SaveWorkState saveWorkState, TransactionType transactionType) {
       throw new NotImplementedException();
     }
   }
