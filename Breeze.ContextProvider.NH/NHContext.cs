@@ -293,7 +293,7 @@ namespace Breeze.ContextProvider.NH {
 
       if (state == EntityState.Modified) {
         CheckForKeyUpdate(entityInfo, classMeta);
-        session.Update(entity);
+        entityInfo.Entity = session.Merge(entity);
       } else if (state == EntityState.Added) {
         session.Save(entity);
       } else if (state == EntityState.Deleted) {
