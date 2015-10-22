@@ -249,6 +249,7 @@ namespace Breeze.ContextProvider.EF6 {
     private List<EFEntityInfo> ProcessSaves(Dictionary<Type, List<EntityInfo>> saveMap) {
       var deletedEntities = new List<EFEntityInfo>();
       foreach (var kvp in saveMap) {
+        if (kvp.Value == null || kvp.Value.Count == 0) continue;  // skip GetEntitySetName if no entities
         var entityType = kvp.Key;
         var entitySetName = GetEntitySetName(entityType);
         foreach (EFEntityInfo entityInfo in kvp.Value) {
@@ -804,7 +805,7 @@ namespace Breeze.ContextProvider.EF6 {
         this.EntityTypeName = entityInfo.Entity.GetType().FullName;
         this.KeyValues = GetKeyValues(entityInfo);
       }
-      ErrorName = ErrorName;
+      ErrorName = errorName;
       ErrorMessage = errorMessage;
       PropertyName = propertyName;
     }
