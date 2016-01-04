@@ -249,6 +249,7 @@ namespace Breeze.ContextProvider.EF6 {
     private List<EFEntityInfo> ProcessSaves(Dictionary<Type, List<EntityInfo>> saveMap) {
       var deletedEntities = new List<EFEntityInfo>();
       foreach (var kvp in saveMap) {
+        if (kvp.Value == null || kvp.Value.Count == 0) continue;  // skip GetEntitySetName if no entities
         var entityType = kvp.Key;
         var entitySetName = GetEntitySetName(entityType);
         foreach (EFEntityInfo entityInfo in kvp.Value) {
@@ -501,7 +502,16 @@ namespace Breeze.ContextProvider.EF6 {
       } else {
         // Guids fail above - try this
         TypeConverter typeConverter = TypeDescriptor.GetConverter(toType);
-        result = typeConverter.ConvertFrom(val);
+        if (typeConverter.CanConvertFrom(val.GetType())) {
+          result = typeConverter.ConvertFrom(val);
+        }
+        else if (val is DateTime && toType == typeof(DateTimeOffset)) {
+          // handle case where JSON deserializes to DateTime, but toType is DateTimeOffset.  DateTimeOffsetConverter doesn't work!
+          result = new DateTimeOffset((DateTime) val);
+        }
+        else {
+          result = val;
+        }
       }
       return result;
     }
@@ -804,7 +814,7 @@ namespace Breeze.ContextProvider.EF6 {
         this.EntityTypeName = entityInfo.Entity.GetType().FullName;
         this.KeyValues = GetKeyValues(entityInfo);
       }
-      ErrorName = ErrorName;
+      ErrorName = errorName;
       ErrorMessage = errorMessage;
       PropertyName = propertyName;
     }
