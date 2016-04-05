@@ -8,6 +8,7 @@ var path = require('path');
 var glob = require('glob');
 var async = require('async');
 var del = require('del');
+const zip = require('gulp-zip');
 var eventStream = require('event-stream');
 
 // include plug-ins
@@ -55,7 +56,19 @@ gulp.task("copyDlls", ['breezeServerBuild'], function() {
   updateFiles(streams, ".dll");
   gutil.log('copying XMLs...')
   updateFiles(streams, ".XML");
+  gutil.log('copying PDBs...')
+  updateFiles(streams, ".pdb");
   return eventStream.concat.apply(null, streams);
+});
+
+// create a zip file of all the .dll and .xml files
+gulp.task("zipDlls", ["copyDlls"], function() {
+    var fileNames = glob.sync(_nugetDir + '**/*.XML')
+        .concat(glob.sync(_nugetDir + '**/*.dll'))
+        .concat(glob.sync(_nugetDir + '**/*.pdb'));
+    return gulp.src(fileNames)
+        .pipe(zip('breeze-server-net.zip'))
+        .pipe(gulp.dest('../build'));
 });
 
 // for each file in nuget dir, copy existing file from the release dir.
