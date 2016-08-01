@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 IdeaBlade, Inc.  All Rights Reserved.  
+ * Copyright 2012-2016 IdeaBlade, Inc.  All Rights Reserved.  
  * Use, reproduction, distribution, and modification of this code is subject to the terms and 
  * conditions of the IdeaBlade Breeze license, available at http://www.breezejs.com/license
  *
@@ -23,7 +23,7 @@
 })(this, function (global) {
     "use strict"; 
     var breeze = {
-        version: "1.5.5",
+        version: "1.5.10",
         metadataVersion: "1.0.5"
     };
     ;/**
@@ -633,6 +633,15 @@ function __formatString(string) {
   });
 }
 
+// Change text to title case with spaces, e.g. 'myPropertyName12' to 'My Property Name 12'
+// See http://stackoverflow.com/questions/7225407/convert-camelcasetext-to-camel-case-text
+var __camelEdges = /([A-Z](?=[A-Z][a-z])|[^A-Z](?=[A-Z])|[a-zA-Z](?=[^a-zA-Z]))/g;
+function __titleCaseSpace(text) {
+  text = text.replace(__camelEdges, '$1 ');
+  text = text.charAt(0).toUpperCase() + text.slice(1);
+  return text;
+}
+
 // end of string functions
 
 // See Mark Miller’s explanation of what this does.
@@ -689,6 +698,7 @@ core.isNumeric = __isNumeric;
 core.stringStartsWith = __stringStartsWith;
 core.stringEndsWith = __stringEndsWith;
 core.formatString = __formatString;
+core.titleCase = __titleCaseSpace;
 
 core.getPropertyDescriptor = __getPropDescriptor;
 
@@ -3206,7 +3216,7 @@ breeze.ValidationOptions = ValidationOptions;
    complexTypes associated with a data property on a single entity or other complex object. i.e. customer.orders or order.orderDetails.
    This collection looks like an array in that the basic methods on arrays such as 'push', 'pop', 'shift', 'unshift', 'splice'
    are all provided as well as several special purpose methods.
-   @class ~complexArray
+   @class {complexArray}
    **/
 
   /**
@@ -3227,7 +3237,7 @@ breeze.ValidationOptions = ValidationOptions;
   @readOnly
   **/
 
-    // virtual impls 
+    // virtual impls
   complexArrayMixin._getGoodAdds = function (adds) {
     return getGoodAdds(this, adds);
   };
@@ -4671,7 +4681,7 @@ var EntityState = (function () {
     @example
         return es === EntityState.Added || es === EntityState.Modified || es === EntityState.Deleted
     @method isAddedModifiedOrDeleted
-    @return {Boolean} Whether an entityState instance is EntityState.Unchanged or EntityState.Modified or EntityState.Deleted.
+    @return {Boolean} Whether an entityState instance is EntityState.Added or EntityState.Modified or EntityState.Deleted.
     **/
     isAddedModifiedOrDeleted: function () {
       return this === EntityState.Added ||
@@ -4743,7 +4753,7 @@ breeze.EntityState = EntityState;
   primitive types associated with a data property on a single entity or complex object. i.e. customer.invoiceNumbers.
   This collection looks like an array in that the basic methods on arrays such as 'push', 'pop', 'shift', 'unshift', 'splice'
   are all provided as well as several special purpose methods.
-  @class ~primitiveArray
+  @class {primitiveArray}
   **/
 
   /**
@@ -4764,7 +4774,7 @@ breeze.EntityState = EntityState;
   @readOnly
   **/
 
-    // virtual impls 
+    // virtual impls
   primitiveArrayMixin._getGoodAdds = function (adds) {
     return adds;
   };
@@ -4818,7 +4828,7 @@ breeze.EntityState = EntityState;
   entities associated with a navigation property on a single entity. i.e. customer.orders or order.orderDetails.
   This collection looks like an array in that the basic methods on arrays such as 'push', 'pop', 'shift', 'unshift', 'splice'
   are all provided as well as several special purpose methods.
-  @class ~relationArray
+  @class {relationArray}
   **/
 
   /**
@@ -5810,7 +5820,7 @@ var DataType = (function () {
     isDate: true,
     parse: coerceToDate,
     parseRawValue: parseRawDate,
-    normalize: function(value) { return value && value.getTime(); }, // dates don't perform equality comparisons properly
+    normalize: function(value) { return value && value.getTime && value.getTime(); }, // dates don't perform equality comparisons properly
     fmtOData: fmtDateTime,
     getNext: getNextDateTime,
     getConcurrencyValue: getConcurrencyDateTime
@@ -5826,7 +5836,7 @@ var DataType = (function () {
     isDate: true,
     parse: coerceToDate,
     parseRawValue: parseRawDate,
-    normalize: function(value) { return value && value.getTime(); }, // dates don't perform equality comparisons properly
+    normalize: function (value) { return value && value.getTime && value.getTime(); }, // dates don't perform equality comparisons properly
     fmtOData: fmtDateTimeOffset,
     getNext: getNextDateTime,
     getConcurrencyValue: getConcurrencyDateTime
@@ -6295,8 +6305,12 @@ var JsonResultsAdapter = (function () {
   @method <ctor> JsonResultsAdapter
   @param config {Object}
   @param config.name {String} The name of this adapter.  This name is used to uniquely identify and locate this instance when an 'exported' JsonResultsAdapter is later imported.
-  @param [config.extractResults] {Function} Called once per service operation to extract the 'payload' from any json received over the wire.
+  @param [config.extractResults] {Function} Called once per query operation to extract the 'payload' from any json received over the wire.
   This method has a default implementation which to simply return the "results" property from any json returned as a result of executing the query.
+  @param [config.extractSaveResults] {Function} Called once per save operation to extract the entities from any json received over the wire.  Must return an array.
+  This method has a default implementation which to simply return the "entities" property from any json returned as a result of executing the save.
+  @param [config.extractKeyMappings] {Function} Called once per save operation to extract the key mappings from any json received over the wire.  Must return an array.
+  This method has a default implementation which to simply return the "keyMappings" property from any json returned as a result of executing the save.
   @param config.visitNode {Function} A visitor method that will be called on each node of the returned payload.
   **/
   var ctor = function JsonResultsAdapter(config) {
@@ -6307,6 +6321,8 @@ var JsonResultsAdapter = (function () {
     assertConfig(config)
         .whereParam("name").isNonEmptyString()
         .whereParam("extractResults").isFunction().isOptional().withDefault(extractResultsDefault)
+        .whereParam("extractSaveResults").isFunction().isOptional().withDefault(extractSaveResultsDefault)
+        .whereParam("extractKeyMappings").isFunction().isOptional().withDefault(extractKeyMappingsDefault)
         .whereParam("visitNode").isFunction()
         .applyAll(this);
     __config._storeObject(this, proto._$typeName, this.name);
@@ -6318,7 +6334,15 @@ var JsonResultsAdapter = (function () {
   function extractResultsDefault(data) {
     return data.results;
   }
-  
+
+  function extractSaveResultsDefault(data) {
+    return data.entities || data.Entities || [];
+  }
+
+  function extractKeyMappingsDefault(data) {
+    return data.keyMappings || data.KeyMappings || [];
+  }
+
   return ctor;
 })();
 
@@ -6332,7 +6356,7 @@ breeze.JsonResultsAdapter = JsonResultsAdapter;
 
 // Get the promises library called Q
 // define a quick failing version if not found.
-var Q = __requireLibCore("Q");
+var Q = core.requireLib("Q;q");
 
 if (!Q) {
   // No Q.js! Substitute a placeholder Q which always fails
@@ -6820,6 +6844,13 @@ var MetadataStore = (function () {
 
     var qualifiedTypeName = getQualifiedTypeName(this, structuralTypeName, false);
     var typeName = qualifiedTypeName || structuralTypeName;
+
+    if (aCtor) {
+      if (aCtor._$typeName && aCtor._$typeName != typeName) {
+        console.warn("Registering a constructor for " + typeName + " that is already used for " + aCtor._$typeName + ".");
+      }
+      aCtor._$typeName = typeName;
+    }
 
     this._ctorRegistry[typeName] = { ctor: aCtor, initFn: initFn, noTrackingFn: noTrackingFn };
     if (qualifiedTypeName) {
@@ -8791,6 +8822,20 @@ var DataProperty = (function () {
   **/
 
   /**
+  The display name of this property
+
+  __readOnly__
+  @property displayName {String} 
+  **/
+  
+  /**
+  The name of this property on the server
+
+  __readOnly__
+  @property nameOnServer {String} 
+  **/
+  
+  /**
   The parent type that this property belongs to - will be either a {{#crossLink "EntityType"}}{{/crossLink}} or a {{#crossLink "ComplexType"}}{{/crossLink}}.
 
   __readOnly__
@@ -9087,6 +9132,20 @@ var NavigationProperty = (function () {
   @property name {String}
   **/
 
+  /**
+  The display name of this property
+
+  __readOnly__
+  @property displayName {String} 
+  **/
+  
+  /**
+  The name of this property on the server
+
+  __readOnly__
+  @property nameOnServer {String} 
+  **/
+  
   /**
   The {{#crossLink "EntityType"}}{{/crossLink}} returned by this property.
 
@@ -12176,7 +12235,19 @@ var FilterQueryOp = (function () {
    @static
    **/
   aEnum.All = aEnum.addSymbol({ operator: "all" });
-  
+
+  /**
+   @property In {FilterQueryOp}
+   @final
+   @static
+   **/
+  aEnum.In = aEnum.addSymbol({ operator: "in" });
+
+  /**
+   @property IsTypeOf {FilterQueryOp}
+   @final
+   @static
+   **/
   aEnum.IsTypeOf = aEnum.addSymbol({ operator: "isof" });
   
   aEnum.resolveSymbols();
@@ -16339,7 +16410,7 @@ breeze.SaveOptions = SaveOptions;
 
   proto.initialize = function () {
     // look for the jQuery lib but don't fail immediately if not found
-    jQuery = core.requireLib("jQuery");
+    jQuery = core.requireLib("jQuery;jquery");
   };
 
   proto.ajax = function (config) {
@@ -16447,6 +16518,8 @@ breeze.SaveOptions = SaveOptions;
   var MetadataStore = breeze.MetadataStore;
   var JsonResultsAdapter = breeze.JsonResultsAdapter;
   var DataProperty = breeze.DataProperty;
+  var DataType = breeze.DataType;
+  var AutoGeneratedKeyType = breeze.AutoGeneratedKeyType;
 
   var OData;
 
@@ -16467,6 +16540,20 @@ breeze.SaveOptions = SaveOptions;
   proto._createChangeRequestInterceptor = abstractDsaProto._createChangeRequestInterceptor;
   proto.headers = { "DataServiceVersion": "2.0" };
 
+  // Absolute URL is the default as of Breeze 1.5.5.  
+  // To use relative URL (like pre-1.5.5), add adapterInstance.relativeUrl = true:
+  //
+  //     var ds = breeze.config.initializeAdapterInstance("dataService", "webApiOData");
+  //     ds.relativeUrl = true; 
+  //
+  // To use custom url construction, add adapterInstance.relativeUrl = myfunction(dataService, url):
+  //
+  //     var ds = breeze.config.initializeAdapterInstance("dataService", "webApiOData");
+  //     ds.relativeUrl = function(dataService, url) {
+  //        return somehowConvert(url);
+  //     }
+  //
+
   proto.getAbsoluteUrl = function (dataService, url){
     var serviceName = dataService.qualifyUrl('');
     // only prefix with serviceName if not already on the url
@@ -16481,14 +16568,58 @@ breeze.SaveOptions = SaveOptions;
     return base + url;
   };
 
-  // getRoutePrefix deprecated in favor of getAbsoluteUrl which seems to work for all OData providers; doubt anyone ever changed it; we'll see
-  // TODO: Remove from code base soon (15 June 2015)
-  // proto.getRoutePrefix = function (dataService) { return '';}   
+  proto.getRoutePrefix = function (dataService) {
+      // Get the routePrefix from a Web API OData service name.
+      // The routePrefix is presumed to be the pathname within the dataService.serviceName
+      // Examples of servicename -> routePrefix:
+      //   'http://localhost:55802/odata/' -> 'odata/'
+      //   'http://198.154.121.75/service/odata/' -> 'service/odata/'
+      var parser;
+      if (typeof document === 'object') { // browser
+          parser = document.createElement('a');
+          parser.href = dataService.serviceName;
+      } else { // node
+          parser = url.parse(dataService.serviceName);
+      }
+      var prefix = parser.pathname;
+      if (prefix[0] === '/') {
+          prefix = prefix.substr(1);
+      } // drop leading '/'  (all but IE)
+      if (prefix.substr(-1) !== '/') {
+          prefix += '/';
+      }      // ensure trailing '/'
+      return prefix;
+  };
+
+  // crude serializer.  Doesn't recurse
+  function toQueryString(obj) {
+    var parts = [];
+    for (var i in obj) {
+      if (obj.hasOwnProperty(i)) {
+        parts.push(encodeURIComponent(i) + "=" + encodeURIComponent(obj[i]));
+      }
+    }
+    return parts.join("&");
+  }
 
   proto.executeQuery = function (mappingContext) {
 
-    var deferred = Q.defer();
-    var url = this.getAbsoluteUrl(mappingContext.dataService, mappingContext.getUrl());
+    var deferred = breeze.Q.defer();
+    var url;
+    if (this.relativeUrl === true) {
+      url = mappingContext.getUrl();
+    } else if (core.isFunction(this.relativeUrl)) {
+      url = this.relativeUrl(mappingContext.dataService, mappingContext.getUrl());
+    } else {
+      url = this.getAbsoluteUrl(mappingContext.dataService, mappingContext.getUrl());
+    }
+
+    // Add query params if .withParameters was used
+    if (mappingContext.query.parameters) {
+      var paramString = toQueryString(mappingContext.query.parameters);
+      var sep = url.indexOf("?") < 0 ? "?" : "&";
+      url = url + sep + paramString;
+    }
 
     OData.read({
           requestUri: url,
@@ -16500,7 +16631,16 @@ breeze.SaveOptions = SaveOptions;
             // OData can return data.__count as a string
             inlineCount = parseInt(data.__count, 10);
           }
-          return deferred.resolve({ results: data.results, inlineCount: inlineCount, httpResponse: response });
+          // Odata returns different result structure when it returns multiple entities (data.results) vs single entity (data directly).
+          // @see http://www.odata.org/documentation/odata-version-2-0/json-format/#RepresentingCollectionsOfEntries
+          // and http://www.odata.org/documentation/odata-version-2-0/json-format/#RepresentingEntries
+          var results;
+          if (data.results) {
+            results = data.results;
+          } else {
+            results = data;
+          }
+          return deferred.resolve({ results: results, inlineCount: inlineCount, httpResponse: response });
         },
         function (error) {
           return deferred.reject(createError(error, url));
@@ -16512,16 +16652,27 @@ breeze.SaveOptions = SaveOptions;
 
   proto.fetchMetadata = function (metadataStore, dataService) {
 
-    var deferred = Q.defer();
+    var deferred = breeze.Q.defer();
 
     var serviceName = dataService.serviceName;
-    //var url = dataService.qualifyUrl('$metadata');
-    var url = this.getAbsoluteUrl(dataService, '$metadata');
+
+    var url;
+    if (this.relativeUrl === true) {
+      url = dataService.qualifyUrl('$metadata');
+    } else if (core.isFunction(this.relativeUrl)) {
+      url = this.relativeUrl(dataService, '$metadata');
+    } else {
+      url = this.getAbsoluteUrl(dataService, '$metadata');
+    }
+
+    var mheaders = __extend({}, this.headers);
+    mheaders.Accept = 'application/json;odata.metadata=full';
+
     // OData.read(url,
     OData.read({
           requestUri: url,
           // headers: { "Accept": "application/json"}
-          headers: { Accept: 'application/json;odata.metadata=full' }
+          headers: mheaders
         },
         function (data) {
           // data.dataServices.schema is an array of schemas. with properties of
@@ -16561,18 +16712,26 @@ breeze.SaveOptions = SaveOptions;
 
   proto.saveChanges = function (saveContext, saveBundle) {
     var adapter = saveContext.adapter = this;
-    var deferred = Q.defer();
-    //saveContext.routePrefix = adapter.getRoutePrefix(saveContext.dataService);
-    //var url = saveContext.dataService.qualifyUrl("$batch");
-    saveContext.routePrefix = adapter.getAbsoluteUrl(saveContext.dataService, ''); 
-    var url = saveContext.routePrefix + '$batch';                   
+    var deferred = breeze.Q.defer();
+
+    var url;
+    if (this.relativeUrl === true) {
+      saveContext.routePrefix = adapter.getRoutePrefix(saveContext.dataService);
+      url = saveContext.dataService.qualifyUrl("$batch");
+    } else if (core.isFunction(adapter.relativeUrl)) {
+      saveContext.routePrefix = adapter.relativeUrl(saveContext.dataService, '');
+      url = saveContext.routePrefix + '$batch';
+    } else {
+      saveContext.routePrefix = adapter.getAbsoluteUrl(saveContext.dataService, '');
+      url = saveContext.routePrefix + '$batch';
+    }
 
     var requestData = createChangeRequests(saveContext, saveBundle);
     var tempKeys = saveContext.tempKeys;
     var contentKeys = saveContext.contentKeys;
 
     OData.request({
-      headers: { "DataServiceVersion": "2.0" },
+      headers: this.headers,
       requestUri: url,
       method: "POST",
       data: requestData
@@ -16590,6 +16749,10 @@ breeze.SaveOptions = SaveOptions;
           }
 
           var contentId = cr.headers["Content-ID"];
+          // Olingo sends different case of 'ID' for the header name.
+          if (!contentId) {
+            contentId = cr.headers["Content-Id"];
+          }
 
           var rawEntity = cr.data;
           if (rawEntity) {
@@ -16823,33 +16986,6 @@ breeze.SaveOptions = SaveOptions;
 
   breeze.core.extend(webApiODataCtor.prototype, proto);
 
-/*
-  // Deprecated in favor of getAbsoluteUrl
-  // TODO: Remove from code base soon (15 June 2015)
-  webApiODataCtor.prototype.getRoutePrefix = function (dataService) {
-    // Get the routePrefix from a Web API OData service name.
-    // The routePrefix is presumed to be the pathname within the dataService.serviceName
-    // Examples of servicename -> routePrefix:
-    //   'http://localhost:55802/odata/' -> 'odata/'
-    //   'http://198.154.121.75/service/odata/' -> 'service/odata/'
-    var parser;
-    if (typeof document === 'object') { // browser
-      parser = document.createElement('a');
-      parser.href = dataService.serviceName;
-    } else { // node
-      parser = url.parse(dataService.serviceName);
-    }
-    var prefix = parser.pathname;
-    if (prefix[0] === '/') {
-      prefix = prefix.substr(1);
-    } // drop leading '/'  (all but IE)
-    if (prefix.substr(-1) !== '/') {
-      prefix += '/';
-    }      // ensure trailing '/'
-    return prefix;
-  };
-  */
-
   breeze.config.registerAdapter("dataService", webApiODataCtor);
   // OData 4 adapter
   var webApiOData4Ctor = function () {
@@ -16923,22 +17059,22 @@ breeze.SaveOptions = SaveOptions;
   };
 
   proto._prepareSaveResult = function (saveContext, data) {
-    // if lower case then all properties are already in there 'correct' case
-    // and the entityType name is already a client side name.
-    if (data.entities) {
-      // data: { entities: array of entities, keyMappings array of keyMappings
-      //   where: keyMapping: { entityTypeName: ..., tempValue: ..., realValue ... }
-      return data;
-    } else {
-      // else if coming from .NET
+    // use the jsonResultAdapter to extractResults and extractKeyMappings
+    var jra = saveContext.dataService.jsonResultsAdapter || this.jsonResultsAdapter;
+    var entities = jra.extractSaveResults(data) || [];
+    var keyMappings = jra.extractKeyMappings(data) || [];
+
+    if (keyMappings.length) {
       // HACK: need to change the 'case' of properties in the saveResult
       // but KeyMapping properties internally are still ucase. ugh...
-      var keyMappings = data.KeyMappings.map(function (km) {
+      keyMappings = keyMappings.map(function (km) {
+        if (km.entityTypeName) return km; // it's already lower case
+
         var entityTypeName = MetadataStore.normalizeTypeName(km.EntityTypeName);
         return { entityTypeName: entityTypeName, tempValue: km.TempValue, realValue: km.RealValue };
       });
-      return { entities: data.Entities, keyMappings: keyMappings };
     }
+    return { entities: entities, keyMappings: keyMappings };
   };
 
   proto.jsonResultsAdapter = new JsonResultsAdapter({
@@ -17053,7 +17189,7 @@ breeze.SaveOptions = SaveOptions;
 
       } else if (prop.isNavigationProperty) {
         if (val !== undefined) {
-          throw new Error("Cannot assign a navigation property in an entity ctor.: " + prop.Name);
+          throw new Error("Cannot assign a navigation property in an entity ctor.: " + propName);
         }
         if (prop.isScalar) {
           // TODO: change this to nullstob later.
@@ -17283,7 +17419,7 @@ breeze.SaveOptions = SaveOptions;
   var protoFn = ctor.prototype;
 
   protoFn.initialize = function () {
-    ko = core.requireLib("ko", "The Knockout library");
+    ko = core.requireLib("ko;knockout", "The Knockout library");
     ko.extenders.intercept = function (target, interceptorOptions) {
       var instance = interceptorOptions.instance;
       var property = interceptorOptions.property;
@@ -17530,6 +17666,8 @@ breeze.SaveOptions = SaveOptions;
   }
 }(function (breeze) {
   "use strict";
+
+  var EntityType = breeze.EntityType;
 
   var ctor = function UriBuilderJsonAdapter() {
     this.name = "json";

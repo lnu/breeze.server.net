@@ -125,10 +125,20 @@ gulp.task('nugetDeploy', function(done) {
   var fileNames = glob.sync( src);
   async.each(fileNames, function (fileName, cb) {
     gutil.log('Deploying nuspec file: ' + fileName);
-    var cmd = 'nuget push ' + fileName;
+    var cmd = 'nuget push ' + fileName + ' -Source https://www.nuget.org/api/v2/package';
     execCommands([ cmd], null, cb);
   }, done);
+});
 
+gulp.task('nugetDeployClient', function(done) {
+  gutil.log('Deploying Nugets...');
+  var src = _nugetDir + '**/Breeze.Client.*.nupkg';
+  var fileNames = glob.sync( src);
+  async.each(fileNames, function (fileName, cb) {
+    gutil.log('Deploying nuspec file: ' + fileName);
+    var cmd = 'nuget push ' + fileName + ' -Source https://www.nuget.org/api/v2/package';
+    execCommands([ cmd], null, cb);
+  }, done);
 });
 
 gulp.task('default', ['nugetTestDeploy'] , function() {
@@ -173,8 +183,9 @@ function msBuildSolution(solutionFileName, done) {
   }
   var baseName = path.basename(solutionFileName);
   var rootCmd = _msBuildCmd + '"' + baseName +'"' + _msBuildOptions + ' /t:'
+  var nuGetRestoreCmd = 'nuget.exe restore '  + '"' + baseName +'"';
 
-  var cmds = [rootCmd + 'Clean', rootCmd + 'Rebuild'];
+  var cmds = [nuGetRestoreCmd, rootCmd + 'Clean', rootCmd + 'Rebuild'];
   var cwd = path.dirname(solutionFileName);
   execCommands(cmds, { cwd: cwd},  done);
 }
