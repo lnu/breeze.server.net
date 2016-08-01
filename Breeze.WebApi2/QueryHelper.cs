@@ -93,9 +93,7 @@ namespace Breeze.WebApi2 {
       } else if (ManuallyExpand && !string.IsNullOrWhiteSpace(expandQueryString))  {
         newQueryOptions = QueryHelper.RemoveSelectExpandOrderBy(newQueryOptions);
       }
-      if (newQueryOptions.InlineCount != null) {
-          newQueryOptions = QueryHelper.RemoveInlineCount(newQueryOptions);
-      }
+
 
       if (newQueryOptions == queryOptions) {
         return queryOptions.ApplyTo(queryable, querySettings);
