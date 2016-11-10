@@ -24,7 +24,7 @@ var _jsSrcDir = '../../Breeze.js/src/'
 var _jsBuildDir = '../../Breeze.js/build/';
 var _nugetDir = '../Nuget.builds/'
 // var _msBuildCmd = 'C:/Windows/Microsoft.NET/Framework/v4.0.30319/MSBuild.exe ';
-var _msBuildCmd = '"C:/Program Files (x86)/MSBuild/12.0/Bin/MsBuild.exe" '; // vs 2013 version of MsBuild
+var _msBuildCmd = '"C:/Program Files (x86)/MSBuild/14.0/Bin/MsBuild.exe" '; // vs 2015 version of MsBuild
 var _msBuildOptions = ' /p:Configuration=Release /verbosity:minimal ';
 
 var _versionNum = getBreezeVersion();
@@ -125,7 +125,7 @@ gulp.task('nugetDeploy', function(done) {
   var fileNames = glob.sync( src);
   async.each(fileNames, function (fileName, cb) {
     gutil.log('Deploying nuspec file: ' + fileName);
-    var cmd = 'nuget push ' + fileName + ' -Source https://www.nuget.org/api/v2/package';
+    var cmd = 'nuget push ' + fileName + ' -Source https://www.nuget.org';
     execCommands([ cmd], null, cb);
   }, done);
 });
@@ -136,7 +136,7 @@ gulp.task('nugetDeployClient', function(done) {
   var fileNames = glob.sync( src);
   async.each(fileNames, function (fileName, cb) {
     gutil.log('Deploying nuspec file: ' + fileName);
-    var cmd = 'nuget push ' + fileName + ' -Source https://www.nuget.org/api/v2/package';
+    var cmd = 'nuget push ' + fileName + ' -Source https://www.nuget.org';
     execCommands([ cmd], null, cb);
   }, done);
 });

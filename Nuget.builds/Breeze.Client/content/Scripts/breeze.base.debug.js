@@ -23,7 +23,7 @@
 })(this, function (global) {
     "use strict"; 
     var breeze = {
-        version: "1.5.10",
+        version: "1.5.15",
         metadataVersion: "1.0.5"
     };
     ;/**
@@ -205,14 +205,22 @@ function __toJson(source, template, target) {
   return target;
 }
 
+// default replacer function for __toJSONSafe.  Excludes entityAspect and other internal properties
+function __safeReplacer(prop, val) {
+	if (prop === "entityAspect" || prop === "complexAspect" || prop === "entityType" || prop === "complexType"
+	|| prop === "constructor" || prop.charAt(0) === '_' || prop.charAt(0) === '$') return;
+	return val;
+}
+
 // safely perform toJSON logic on objects with cycles.
 function __toJSONSafe(obj, replacer) {
   if (obj !== Object(obj)) return obj; // primitive value
   if (obj._$visited) return undefined;
+  replacer = replacer || __safeReplacer;
   if (obj.toJSON) {
     var newObj = obj.toJSON();
     if (newObj !== Object(newObj)) return newObj; // primitive value
-    if (newObj !== obj) return __toJSONSafe(newObj);
+    if (newObj !== obj) return __toJSONSafe(newObj, replacer);
     // toJSON returned the object unchanged.
     obj = newObj;
   }
@@ -233,7 +241,7 @@ function __toJSONSafe(obj, replacer) {
         val = replacer(prop, val);
         if (val === undefined) continue;
       }
-      val = __toJSONSafe(val);
+      val = __toJSONSafe(val, replacer);
       if (val === undefined) continue;
       result[prop] = val;
     }
@@ -602,7 +610,7 @@ function __isPrimitive(obj) {
   if (obj == null) return false;
   // true for numbers, strings, booleans and null, false for objects
   if (obj != Object(obj)) return true;
-  return _isDate(obj);
+  return __isDate(obj);
 }
 
 // end of is Functions
@@ -703,6 +711,7 @@ core.titleCase = __titleCaseSpace;
 core.getPropertyDescriptor = __getPropDescriptor;
 
 core.toJSONSafe = __toJSONSafe;
+core.toJSONSafeReplacer = __safeReplacer;
 
 core.parent = breeze;
 breeze.core = core;
@@ -4955,7 +4964,7 @@ breeze.EntityState = EntityState;
     // don't allow dups in this array. - also prevents recursion
     var parentEntity = relationArray.parentEntity;
     var navProp = relationArray.navigationProperty;
-    var inverseProp = navProp.inverse;
+    var inverseProp = navProp.inverse || (navProp.baseProperty && navProp.baseProperty.inverse); // TODO climb hierarchy
     var goodAdds;
     if (inverseProp) {
       goodAdds = adds.filter(function (a) {
@@ -4969,6 +4978,7 @@ breeze.EntityState = EntityState;
       // This occurs with a unidirectional 1->N relation ( where there is no n -> 1)
       // in this case we compare fks.
       var fkPropNames = navProp.invForeignKeyNames;
+      if (navProp.baseProperty && (!fkPropNames.length)) fkPropNames = navProp.baseProperty.invForeignKeyNames; // TODO climb hierarchy
       var keyProps = parentEntity.entityType.keyProperties;
       goodAdds = adds.filter(function (a) {
         if (relationArray._addsInProcess.indexOf(a) >= 0) {
@@ -7790,7 +7800,21 @@ var EntityType = (function () {
     assertParam(property, "property").isInstanceOf(DataProperty).or().isInstanceOf(NavigationProperty).check();
 
     // true is 2nd arg to force resolve of any navigation properties.
-    return this._addPropertyCore(property, true);
+    var newprop = this._addPropertyCore(property, true);
+
+    if (this.subtypes && this.subtypes.length) {
+      var stype = this;
+      stype.getSelfAndSubtypes().forEach(function (st) {
+        if (st !== stype) {
+          if (property.isNavigationProperty) {
+            st._addPropertyCore(new NavigationProperty(property), true);
+          } else {
+            st._addPropertyCore(new DataProperty(property), true);
+          }
+        }
+      });
+    }
+    return newprop;
   };
 
   proto._updateFromBase = function (baseEntityType) {
@@ -8467,7 +8491,7 @@ var EntityType = (function () {
           isUnmapped: true
         });
         newProp.isSettable = __isSettable(instance, pn);
-        if (stype.subtypes) {
+        if (stype.subtypes && stype.subtypes.length) {
           stype.getSelfAndSubtypes().forEach(function (st) {
             st._addPropertyCore(new DataProperty(newProp));
           });
@@ -11093,6 +11117,9 @@ breeze.NamingConvention = NamingConvention;
         var predVals = this.preds.map(function(pred) {
           return pred.visit(context);
         });
+        if (!predVals || !predVals.length) {
+          return {};
+        }
         var json;
         // normalizeAnd clauses if possible.
         // passthru predicate will appear as string and their 'ands' can't be 'normalized'
@@ -14479,9 +14506,14 @@ var EntityManager = (function () {
       var unattachedMap = em._unattachedChildrenMap;
       var entityKey = entityAspect.getKey();
 
+    var entityType = entityKey.entityType;
+    while (entityType) {
+      var keystring = entityKey.toString(entityType);
+
       // attach any unattachedChildren
-      var tuples = unattachedMap.getTuples(entityKey);
-      if (tuples) {
+      var tuples = unattachedMap.getTuplesByString(keystring);
+
+      if (tuples && tuples.length) {
         tuples.slice(0).forEach(function (tpl) {
 
           var unattachedChildren = tpl.children.filter(function (e) {
@@ -14531,9 +14563,11 @@ var EntityManager = (function () {
               });
             }
           }
-          unattachedMap.removeChildren(entityKey, childToParentNp);
+          unattachedMap.removeChildrenByString(keystring, childToParentNp);
         });
       }
+      entityType = entityType.baseEntityType;
+    }
 
 
       // now add to unattachedMap if needed.
@@ -15307,28 +15341,39 @@ var EntityManager = (function () {
     tuple.children.push(child);
   };
 
-  UnattachedChildrenMap.prototype.removeChildren = function (parentEntityKey, navigationProperty) {
-    var tuples = this.getTuples(parentEntityKey);
+  // UnattachedChildrenMap.prototype.removeChildren = function (parentEntityKey, navigationProperty) {
+  //   var tuples = this.getTuples(parentEntityKey);
+  //   if (!tuples) return;
+  //   __arrayRemoveItem(tuples, function (t) {
+  //     return t.navigationProperty === navigationProperty;
+  //   });
+  //   if (!tuples.length) {
+  //     delete this.map[parentEntityKey.toString()];
+  //   }
+  // };
+
+  UnattachedChildrenMap.prototype.removeChildrenByString = function (parentEntityKeyString, navigationProperty) {
+    var tuples = this.map[parentEntityKeyString];
     if (!tuples) return;
     __arrayRemoveItem(tuples, function (t) {
       return t.navigationProperty === navigationProperty;
     });
     if (!tuples.length) {
-      delete this.map[parentEntityKey.toString()];
+      delete this.map[parentEntityKeyString];
     }
   };
 
-  UnattachedChildrenMap.prototype.getChildren = function (parentEntityKey, navigationProperty) {
-    var tuple = this.getTuple(parentEntityKey, navigationProperty);
-    if (tuple) {
-      return tuple.children.filter(function (child) {
-        // it may have later been detached.
-        return !child.entityAspect.entityState.isDetached();
-      });
-    } else {
-      return null;
-    }
-  };
+  // UnattachedChildrenMap.prototype.getChildren = function (parentEntityKey, navigationProperty) {
+  //   var tuple = this.getTuple(parentEntityKey, navigationProperty);
+  //   if (tuple) {
+  //     return tuple.children.filter(function (child) {
+  //       // it may have later been detached.
+  //       return !child.entityAspect.entityState.isDetached();
+  //     });
+  //   } else {
+  //     return null;
+  //   }
+  // };
 
   UnattachedChildrenMap.prototype.getTuple = function (parentEntityKey, navigationProperty) {
     var tuples = this.getTuples(parentEntityKey);
@@ -15349,6 +15394,10 @@ var EntityManager = (function () {
       tuples = this.map[baseKey];
     }
     return tuples;
+  };
+
+  UnattachedChildrenMap.prototype.getTuplesByString = function (parentEntityKeyString) {
+    return this.map[parentEntityKeyString];
   };
 
   return ctor;
@@ -15550,6 +15599,10 @@ var MappingContext = (function () {
 
   function updateEntityRef(mc, targetEntity, node) {
     var nodeId = node._$meta.nodeId;
+    if (!nodeId && node._$meta.extraMetadata) {
+      // odata case.  refMap isn't really used, but is returned as data.retrievedEntities, so we populated it anyway.
+      nodeId = node._$meta.extraMetadata.uriKey;
+    }
     if (nodeId != null) {
       mc.refMap[nodeId] = targetEntity;
     }
@@ -15590,7 +15643,7 @@ var MappingContext = (function () {
             targetEntity.entityAspect.extraMetadata = meta.extraMetadata;
           }
           targetEntity.entityAspect.entityState = EntityState.Unchanged;
-          targetEntity.entityAspect.originalValues = {};
+          clearOriginalValues(targetEntity);
           targetEntity.entityAspect.propertyChanged.publish({ entity: targetEntity, propertyName: null });
           var action = isSaving ? EntityAction.MergeOnSave : EntityAction.MergeOnQuery;
           em.entityChanged.publish({ entityAction: action, entity: targetEntity });
@@ -15620,6 +15673,22 @@ var MappingContext = (function () {
       em.entityChanged.publish({ entityAction: EntityAction.AttachOnQuery, entity: targetEntity });
     }
     return targetEntity;
+  }
+
+  // copied from entityAspect
+  function clearOriginalValues(target) {
+    var aspect = target.entityAspect || target.complexAspect;
+    aspect.originalValues = {};
+    var stype = target.entityType || target.complexType;
+    stype.complexProperties.forEach(function (cp) {
+      var cos = target.getProperty(cp.name);
+      if (cp.isScalar) {
+        clearOriginalValues(cos);
+      } else {
+        cos._acceptChanges();
+        cos.forEach(clearOriginalValues);
+      }
+    });
   }
 
   function updateEntityNoMerge(mc, targetEntity, node) {
