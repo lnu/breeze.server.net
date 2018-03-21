@@ -14,6 +14,7 @@ namespace Breeze.ContextProvider.NH
     {
         protected string[] expandPaths;
         protected ISession session;
+        private NHibernateProxyJsonConverter nhibernateProxyJsonConverter = new NHibernateProxyJsonConverter();
 
         public NHQueryHelper(bool enableConstantParameterization, bool ensureStableOrdering, HandleNullPropagationOption handleNullPropagation, int pageSize)
             : base(enableConstantParameterization, ensureStableOrdering, handleNullPropagation, pageSize)
@@ -73,7 +74,8 @@ namespace Breeze.ContextProvider.NH
         /// <param name="queryable"></param>
         /// <param name="expandsQueryString"></param>
         /// <returns></returns>
-        protected IQueryable NHApplyExpand(IQueryable queryable, ODataQueryOptions queryOptions) {
+        protected IQueryable NHApplyExpand(IQueryable queryable, ODataQueryOptions queryOptions)
+        {
             var expandQueryString = queryOptions.RawValues.Expand;
             if (string.IsNullOrWhiteSpace(expandQueryString)) return queryable;
             string[] expandPaths = expandQueryString.Split(',').Select(s => s.Trim()).ToArray();
@@ -162,7 +164,7 @@ namespace Breeze.ContextProvider.NH
 
             settings.ContractResolver = NHibernateContractResolver.Instance;
 
-            settings.Error = delegate(object sender, Newtonsoft.Json.Serialization.ErrorEventArgs args)
+            settings.Error = delegate (object sender, Newtonsoft.Json.Serialization.ErrorEventArgs args)
             {
                 // When the NHibernate session is closed, NH proxies throw LazyInitializationException when
                 // the serializer tries to access them.  We want to ignore those exceptions.
@@ -171,9 +173,9 @@ namespace Breeze.ContextProvider.NH
                     args.ErrorContext.Handled = true;
             };
 
-            if (!settings.Converters.Any(c => c is NHibernateProxyJsonConverter))
+            if (!settings.Converters.Contains(nhibernateProxyJsonConverter))
             {
-                settings.Converters.Add(new NHibernateProxyJsonConverter());
+                settings.Converters.Add(nhibernateProxyJsonConverter);
             }
         }
 
