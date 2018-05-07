@@ -14,7 +14,6 @@ namespace Breeze.ContextProvider.NH
     {
         protected string[] expandPaths;
         protected ISession session;
-        private NHibernateProxyJsonConverter nhibernateProxyJsonConverter = new NHibernateProxyJsonConverter();
 
         public NHQueryHelper(bool enableConstantParameterization, bool ensureStableOrdering, HandleNullPropagationOption handleNullPropagation, int pageSize)
             : base(enableConstantParameterization, ensureStableOrdering, handleNullPropagation, pageSize)
@@ -173,9 +172,9 @@ namespace Breeze.ContextProvider.NH
                     args.ErrorContext.Handled = true;
             };
 
-            if (!settings.Converters.Contains(nhibernateProxyJsonConverter))
+            if (!settings.Converters.Any(c => c is NHibernateProxyJsonConverter))
             {
-                settings.Converters.Add(nhibernateProxyJsonConverter);
+                settings.Converters.Add(new NHibernateProxyJsonConverter());
             }
         }
 
